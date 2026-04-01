@@ -1,0 +1,15 @@
+---
+title: "GOV 51 Ps3"
+author: "Jenny Jia"
+date: "2026-01-04"
+output: html_document
+---
+GitHub Repository: https://github.com/jennyjia319/gov51-ps3
+```{r}
+install.packages("glmnet")
+library(tidyverse)
+library(glmnet)
+library(knitr)
+compas <- read.csv("data/compas_clean.csv")
+```
+
