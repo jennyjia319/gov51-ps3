@@ -231,7 +231,7 @@ rmse_lasso
 The LASSO RMSE is 0.4592597, which is lower than the simple OLS of 0.462227, kitchen-sink OLS of 0.4890411, and Ridge of 0.4700385. This tells us that LASSO performs the best prediction because it shrinks the coefficients but still eliminates the irrelevant variables, so it's a good tool to use to avoid overfitting. 
 
 # 6 Model Comparison and Interpretation
-## Elastic Net
+## 6.1 Elastic Net
 ```{r}
 set.seed(51) # run given code first
 cv_enet <- cv.glmnet(X_train, y_train, alpha = 0.5, nfolds = 10)
