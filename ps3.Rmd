@@ -75,3 +75,157 @@ nrow(train)
 nrow(test)
 ```
 There are 5771 observations in the training set, and 1443 observations in the test set. 
+
+## 2.2 Fit OLS with Main Effects Only
+```{r}
+ols <- lm(recidivism ~ ., data = train)
+summary(ols)
+```
+(a) At the 5% level, the statistically significant predictors are age, female, black, priors_count, felony, has_juvy_misd, and age_25_45. 
+
+(b) To interpret priors_count coefficient: A one unit increase in priors_count is associate with a 0.029532 increase in the predicted probability of recidivism. 
+
+## 2.3 In-sample vs Out-of-sample RMSE
+```{r}
+train_data <- predict(ols, newdata = train) #  (a) training data predictions
+
+rmse_train <- sqrt(mean((train_data - train$recidivism)^2))
+rmse_train
+
+test_data <- predict(ols, newdata = test) # (b) test data predictions 
+
+rmse_test <- sqrt(mean((test_data - test$recidivism)^2))
+rmse_test
+
+rmse_test - rmse_train # (c) gap calculation
+```
+(a) (b) The in-sample (train) RMSE is 0.4606, while the out-of-sample (test) is 0.4622, and so the gap is 0.001645971. 
+
+(c) This gap is very small, which means the model performs similarly on both the training and test data. Thus, there is minimal evidence to suggest that OLS could be overfitting with the 16 predictors. 
+
+## 2.4 Cross-validation By Hand
+```{r}
+set.seed(51)
+folds <- sample(rep(1:5, length.out = nrow(train))) # first need to run this 
+rmse_cv <- numeric(5)
+
+for (k in 1:5) {
+  train_k <- train[folds != k, ]
+  test_k  <- train[folds == k, ]
+  
+  model_k <- lm(recidivism ~ ., data = train_k)
+  pred_k  <- predict(model_k, newdata = test_k)
+  
+  rmse_cv[k] <- sqrt(mean((test_k$recidivism - pred_k)^2))
+}
+
+mean(rmse_cv)
+```
+(a) The 5-fold cross-validation RMSE is 0.4620144, which is essentially identical to the single-split out-of-sample RMSE of 0.462227. This indicates that the model’s performance is stable and is not sensitive to whether or how the data is split. 
+
+(b) I think cross-validation is more reliable because it assesses performance over multiple data splits rather than just one. This reduces random variation, and gives a better estimate of out-of-sample performance. 
+
+(c) Cross-validation is best for choosing lambda as it tests how values perform on unseen data and minimizes prediction error. 
+
+# 3 The Kitchen Sink: What Happens When You Add Too Many Predictors?
+## #.1 Build the Expanded Model
+```{r}
+
+# Full interaction formula   # run according to pset
+f_full <- recidivism ~ (.)^2 +
+I(age^2) + I(priors_count^2) +
+I(juv_fel_count^2) + I(juv_misd_count^2) +
+I(juv_other_count^2)
+
+# Create design matrices for glmnet (we'll need these later)
+X_train <- model.matrix(f_full, data = train)[, -1]
+X_test <- model.matrix(f_full, data = test)[, -1]
+y_train <- train$recidivism
+y_test <- test$recidivism
+
+# How many features now?
+ncol(X_train)
+```
+(a) The expanded model has 141 predictors. 
+(b) The ratio of training observations to predictors is 40.929078:1 (since 5771/141 = 40.929078). On the other hand, the simple model ratio is 360.6875:1 (since 5771.16 = 360.6875). This is a drastic increase in predictors and model complexity, which raises the risk of overfitting. 
+
+## 3.2 Fit OLS with the Kitchen Sink
+```{r}
+ols_full <- lm(f_full, data = train) 
+
+train_data_full <- predict(ols_full, newdata = train) # (a) in-sample RMSE
+
+rmse_train_full <- sqrt(mean((train_data_full - train$recidivism)^2))
+rmse_train_full
+
+test_data_full <- predict(ols_full, newdata = test) # (b) out-of-sample RMSE
+
+rmse_test_full <- sqrt(mean((test_data_full - test$recidivism)^2))
+rmse_test_full
+
+rmse_test_full - rmse_train_full # (c) gap comparison
+```
+(a) The in-sample RMSE is 0.4485474. 
+(b) The out-of-sample RMSE is 0.4890411.
+(c) The gap between the in-sample and out-of-sample RMSE is 0.04049367, which is much larger than in the simple model of 0.001645971. This indicates significant overfitting in that, while the expanded model achieves a lower in-sample RMSE, its out-of-sample performance  The inclusion of a large number of predictors, including interaction and higher-order terms, greatly increases model complexity, causing the model to fit noise in the training data rather than underlying patterns, thereby reducing its ability to generalize to new data.
+
+## 3.3 The Overfitting Lesson
+Adding many interaction terms increases the model’s flexibility, which allows it to fit the training data extremely closely and bring  the R square value closer to near-1. However, the problem is that this improved in-sample fit is not particularly meaningful, since the model begins to capture noise rather than true patterns, leading to worse performance on new data. This phenomenon is called overfitting.
+
+# 4 Ridge Regression: Shrink Everything
+## 4.1 Fit Ridge with Cross-Validation
+```{r}
+set.seed(51)
+cv_ridge <- cv.glmnet(X_train, y_train, alpha = 0, nfolds = 10)
+cv_ridge$lambda.min
+plot(cv_ridge)
+```
+(a) The optimal lambda is 0.01376272. 
+(b) The plot shows how prediction error changes for different values of lambda. We can observe that, as lambda increases, the model becomes more complex with less shrinkage, while smaller lambda values make the model simpler. The lowest point on the curve shows the lambda that gives the best prediction performance with the lowest mean squared error.
+
+## 4.2 Ridge RMSE
+```{r}
+ridge_predicted <- predict(cv_ridge, newx = X_test, s = "lambda.min")
+
+rmse_ridge <- sqrt(mean((ridge_predicted - y_test)^2))
+rmse_ridge
+```
+The out-of-sample RMSE for Ridge regression is 0.4700385, which is lower than the kitchen sink OLS of 0.4890411 but higher than the simple OLS of 0.462227. This demonstrates that Ridge helps reduce overfitting in more complex models, but it does not outperform the simpler OLS model. 
+
+## 4.3 Did Ridge Set Any Coefficients to Zero?
+```{r}
+coef(cv_ridge, s = "lambda.min")
+```
+No, Ridge does not set all the coefficients to zero exactly, although it is close. We can see that all the values have SHRUNK to near-zero. Since Ridge uses the squared values of coefficients, it shrinks values smoothly towards zero, but the nature of using Ridge means the small coefficients will never be equal to zero. 
+
+# LASSO Regression: Shrink and Select
+# 5.1 Fit LASSO With Cross-Validatoin
+```{r}
+set.seed(51)
+cv_lasso <- cv.glmnet(X_train, y_train, alpha = 1, nfolds = 10)
+cv_lasso$lambda.min # (a)
+```
+(a) The optimal lambda is 0.007694477.
+(b)
+```{r}
+plot(cv_lasso) #(b)
+```
+## 5.2 LASSO Variable Selection
+```{r}
+lasso_coefficient <- coef(cv_lasso, s = "lambda.min")
+
+sum(coef(cv_lasso, s = "lambda.min")[-1] != 0) # (a)
+
+coef(cv_lasso, s = "lambda.min") # (b)
+```
+(a) Among the 141 predictors, 27 variables were retained and have non-zero coefficients, while 114 variables shrunk to zero/were eliminated. 
+(b) Some of the surviving interaction terms are age:female, female:black, or like hispanic:age_25_45. I think this makes intuitive sense because they show that the effect of things like prior offenses or gender can change based on gender/race. This is realistic, since recidivism is likely influenced by a combination of factors, and not just each one acting on its own. 
+(c) LASSO selects the variables to drop based on predictive values and not arbitrary measures, so it only includes the relevant predictors. This makes it a more objective model than if, for example, a researcher were to randomly decide what interactions to include or not. 
+
+## 5.3 LASSO RMSE
+```{r}
+lasso_predicted <- predict(cv_lasso, newx = X_test, s = "lambda.min")
+rmse_lasso <- sqrt(mean((lasso_predicted - y_test)^2))
+rmse_lasso
+```
+The LASSO RMSE is 0.4592597, which is lower than the simple OLS of 0.462227, kitchen-sink OLS of 0.4890411, and Ridge of 0.4700385. This tells us that LASSO performs the best prediction because it shrinks the coefficients but still eliminates the irrelevant variables, so it's a good tool to use to avoid overfitting. 
