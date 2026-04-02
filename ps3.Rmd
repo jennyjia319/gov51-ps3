@@ -2,14 +2,13 @@
 title: "GOV 51 PS3"
 author: "Jenny Jia"
 date: "2026-02-04"
-output: PDF_document
+output: pdf_document
 ---
 GitHub Repository: https://github.com/jennyjia319/gov51-ps3
 
 # 1 Setup and Data Exploration
 ## 1.1 Load Packages and Data
 ```{r}
-install.packages("glmnet")
 library(tidyverse)
 library(glmnet)
 library(knitr)
