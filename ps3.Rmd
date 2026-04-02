@@ -1,7 +1,7 @@
 ---
-title: "GOV 51 Ps3"
+title: "GOV 51 PS3"
 author: "Jenny Jia"
-date: "2026-01-04"
+date: "2026-02-04"
 output: PDF_document
 ---
 GitHub Repository: https://github.com/jennyjia319/gov51-ps3
@@ -206,7 +206,7 @@ cv_lasso <- cv.glmnet(X_train, y_train, alpha = 1, nfolds = 10)
 cv_lasso$lambda.min # (a)
 ```
 (a) The optimal lambda is 0.007694477.
-(b)
+(b) plotted below: 
 ```{r}
 plot(cv_lasso) #(b)
 ```
@@ -229,3 +229,72 @@ rmse_lasso <- sqrt(mean((lasso_predicted - y_test)^2))
 rmse_lasso
 ```
 The LASSO RMSE is 0.4592597, which is lower than the simple OLS of 0.462227, kitchen-sink OLS of 0.4890411, and Ridge of 0.4700385. This tells us that LASSO performs the best prediction because it shrinks the coefficients but still eliminates the irrelevant variables, so it's a good tool to use to avoid overfitting. 
+
+# 6 Model Comparison and Interpretation
+## Elastic Net
+```{r}
+set.seed(51) # run given code first
+cv_enet <- cv.glmnet(X_train, y_train, alpha = 0.5, nfolds = 10)
+
+elastic_predicted <- predict(cv_enet, newx = X_test, s = "lambda.min") # RMSE
+
+rmse_elastic <- sqrt(mean((elastic_predicted- y_test)^2))
+rmse_elastic
+
+sum(coef(cv_enet, s = "lambda.min")[-1] != 0) # variables count
+```
+The elastic net out-of-sample RMSE is 0.4583446 and it retains 43 variables. 
+
+## 6.2 The Big Comparison Table
+```{r}
+table <- tibble(
+  Model = c("OLS (main effects, 16 vars)", 
+            "OLS (kitchen sink, ~141 vars)", 
+            "Ridge", 
+            "LASSO", 
+            "Elastic Net"),
+  
+  Predictors = c(16, 
+                 141, 
+                 141, 
+                 27, 
+                 43),
+  
+  RMSE = c(0.462227, 
+           0.4890411, 
+           0.4700385, 
+           0.4592597, 
+           0.4583446)
+)
+
+kable(table)
+```
+(a) The elastic net model has the lowest out-of-sample RMSE at 0.4583446. 
+(b) The kitchen-sink model has the best sample fit because it has the most predictors (141) so it is able to minimize training error. That being said, this model is not necessarily better for out-of-sample data because it overfits. 
+(c) What the table tells us is that adding more predictors/interactions improves in-sample fit, but it does not translate to better out-of-sample performance. We see that in (b) with the kitchen-sink model, with high variance. On the other hand, LASSO and elastic net introduce slight bias but does reduce variance in data, which is where the bias-variance tradeoff comes in. 
+
+## 6.3 Baker Article Connection
+(a) LASSO was particularly useful in the Halliburton case because it allowed for objective assessment of firms that best predicts the stock's returns. Rather than the subjective hand-selected approach of deciding which firms to include, LASSO uses a penalized approach, so it selected firms based on predictive approaches that drop firms that do not improve the predictions, which settles the disagreement by grounding the model in objective data. 
+(b) Based on my own experience, and Baker's explanation, the OLS model allows for a "bespoke" approach in that we base what to include on our judgment, deciding what variables to manipulate or not. On the other hand, LASSO eliminates this discretion of choice by automatically omitting irrelevant predictors. 
+
+## 6.4 Prediction vs Manipulation
+(a) No, LASSO is not the tool for causal questions because it is designed to improve prediction and may end up shrinking coefficients. 
+(b) The difference is that regression for prediction seeks to make the most accurate predictions of outcomes, like recidivism, while causal inference asks something like whether prior offenses actually CAUSE recidivism, and the research design is important in ensuring we can isolate the cause and effect. 
+
+## 6.5 Algorithmic Fairness
+```{r}
+white <- with(test, black == 0 & hispanic == 0 & asian == 0 & # white defendants
+                    other_race == 0 & native_american == 0)
+
+sum(test$black == 1)   # count black defendants
+sum(white)             # count white defendants
+
+mean(test_pred[test$black == 1])   # (a) predicted
+mean(test_pred[white])             
+
+mean(test$recidivism[test$black == 1])  # (b) actual 
+mean(test$recidivism[white])      
+```
+(a) The mean predicted recidivism rates are 0.511985 for black defendants and 0.3789606 for white defendants, or 51.1985% and 37.89606% respectively. There is a difference, which is that the model predicts a higher recidivism likelihood for black defendants.
+(b) The actual recidivism rate is 0.521262 or 52.1262% for black defendants, and 0.4020202, or 40.20202% for white defendants. These values are both higher than what the model predicted, but, the predictive model is ultimately still able to predict the fact that black recidivism rates are higher than white. 
+(c) I think a potential tradeoff to consider is that, while we are able to reduce human discretion in criminal justice decisions by observing objective data, we must do so looking at historical data, which could result in some biases. Additionally, the predictive method relies on methods that are correlated with outcomes, so they're not truly causal. It would be difficult to justify in the decision-making processes if we cannot establish and isolate for a causal relationship (ex: race causes recidivism). 
